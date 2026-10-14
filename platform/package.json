@@ -1,0 +1,33 @@
+{
+  "name": "agent-mirror-lab",
+  "private": true,
+  "type": "module",
+  "description": "Research platform: do AI agents check what an interface claims? Pure-TS simulation core + game plugins + batch runner.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "run": "tsx src/runner/index.ts",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "publish-data": "node scripts/publish-data.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "puppeteer-core": "^25.12.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.186.1"
+  }
+}

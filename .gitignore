@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output and caches
+dist/
+.vite/
+*.tsbuildinfo
+coverage/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# secrets: never commit API keys or tokens
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# local scratch: screenshots and logs
+shots/
+*.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
