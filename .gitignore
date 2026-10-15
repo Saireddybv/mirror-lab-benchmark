@@ -27,3 +27,7 @@ shots/
 .DS_Store
 Thumbs.db
 .idea/
+
+
+# derived copies made by analysis scripts
+platform/results/combined_*.jsonl

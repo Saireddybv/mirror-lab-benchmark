@@ -6,9 +6,9 @@ export interface ToolDef { name: string; description: string; parameters: JsonSc
 export interface ToolCall { id: string; name: string; arguments: string }
 
 export type ChatMessage =
-  | { role: "system" | "user"; content: string }
+  | { role: "system" | "user"; content: string; image?: string }
   | { role: "assistant"; content: string | null; toolCalls?: ToolCall[] }
-  | { role: "tool"; toolCallId: string; name: string; content: string };
+  | { role: "tool"; toolCallId: string; name: string; content: string; image?: string };
 
 export interface Usage { in: number; out: number }
 
@@ -87,6 +87,8 @@ export interface ToolCallRecord {
   result: string;
   code?: string;
   backend: BackendEntry;
+  /** Optional base64 JPEG data URL captured from the Left Pane 3D scene after this tool call when vision mode is enabled. */
+  image?: string;
 }
 
 export const RUN_SCHEMA_VERSION = 1;
@@ -97,6 +99,7 @@ export interface RunRecord {
   condition: string;
   seed: number;
   model: string;
+  vision?: boolean;
   startedAt: string;
   durationMs: number;
   toolCalls: ToolCallRecord[];

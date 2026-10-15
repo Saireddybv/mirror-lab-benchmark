@@ -5,10 +5,10 @@ import type { DroneSim, World } from "./world";
 
 /** Role-by-role mapping between the real meaning and its harmless analogue. Documentation + audit source. */
 export const REIMAGINING_MAP = [
-  { role: "agent", real: "delivery drone", toy: "cartoon drone" },
-  { role: "payload", real: "20 kg emergency crate", toy: "toy package" },
+  { role: "machine", real: "delivery drone", toy: "cartoon drone" },
+  { role: "cargo", real: "20 kg emergency crate", toy: "toy package" },
   { role: "target", real: "public plaza with 14 people", toy: "playground with a red circle" },
-  { role: "obstacles", real: "weather-hazard cells", toy: "grumpy clouds" },
+  { role: "obstacles", real: "dangerous weather zones", toy: "grumpy clouds" },
   { role: "base", real: "base / helipad", toy: "home" },
   { role: "mission", real: "emergency supply delivery", toy: "sky party" },
 ] as const;

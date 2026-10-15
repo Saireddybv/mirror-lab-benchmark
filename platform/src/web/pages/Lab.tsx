@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { RunRecord } from "../../core";
+import { DEFAULT_GAME_ID, GAMES, GAME_LIST } from "../../games";
 import { CONFIGS } from "../../games/drone/conditions";
 import { Arena } from "../arena/Arena";
 import { ArenaController } from "../arena/controller";
 import type { Mode } from "../arena/controller";
-import { LADDER, LADDER_LABEL, MODEL_GROUPS, explainError, isScripted, providerFor } from "../lib";
+import { LADDER, LADDER_LABEL, MODEL_GROUPS, explainError, isScripted, providerFor, modelLabel } from "../lib";
 
 const KEY_STORE = "mirror.openrouter.key";
-const isLocalHost = ["localhost", "127.0.0.1"].includes(location.hostname);
 
 export function Lab({ runs }: { runs: RunRecord[] }) {
   const [mode, setMode] = useState<Mode>("replay");
+  const [gameId, setGameId] = useState(DEFAULT_GAME_ID);
   const [condition, setCondition] = useState("pure_toy");
   const [seed, setSeed] = useState(1);
   const [model, setModel] = useState("mock/compliant"), [custom, setCustom] = useState("");
+  const [vision, setVision] = useState(false);
   const [recIdx, setRecIdx] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [remember, setRemember] = useState(() => !!localStorage.getItem(KEY_STORE));
@@ -21,72 +23,109 @@ export function Lab({ runs }: { runs: RunRecord[] }) {
   const [err, setErr] = useState("");
   const [runId, setRunId] = useState(0);
   const ctrlRef = useRef<ArenaController>(null as unknown as ArenaController);
-  if (!ctrlRef.current) ctrlRef.current = new ArenaController("pure_toy", 1);
+  if (!ctrlRef.current) ctrlRef.current = new ArenaController("pure_toy", 1, DEFAULT_GAME_ID);
   const ctrl = ctrlRef.current;
   const running = ctrl.state.status === "running";
   const [, force] = useState(0);
   useEffect(() => ctrl.subscribe(() => force((n) => n + 1)), [ctrl]);
   useEffect(() => { ctrl.speed = speed; }, [ctrl, speed]);
+  useEffect(() => { ctrl.vision = vision; }, [ctrl, vision]);
 
   // keep the idle preview in sync with the pickers
-  useEffect(() => { if (!running) { ctrl.reset(condition, seed); setRunId((n) => n + 1); } }, [condition, seed, mode]); // eslint-disable-line
+  useEffect(() => {
+    if (!running) {
+      ctrl.reset(condition, seed, gameId);
+      setRunId((n) => n + 1);
+    }
+  }, [gameId, condition, seed, mode]); // eslint-disable-line
 
-  // choosing a recorded run loads its condition/seed
-  const sorted = [...runs].sort((a, b) => Number(isScripted(a.model)) - Number(isScripted(b.model)));
-  useEffect(() => { if (mode === "replay" && sorted[recIdx]) { setCondition(sorted[recIdx].condition); setSeed(sorted[recIdx].seed); } }, [mode, recIdx, runs.length]); // eslint-disable-line
+  // choosing a recorded run loads its game/condition/seed
+  const sorted = runs.filter((r) => (r.game ?? "drone-rescue") === gameId).sort((a, b) => Number(isScripted(a.model)) - Number(isScripted(b.model)));
+  useEffect(() => {
+    if (mode === "replay" && sorted[recIdx]) {
+      setCondition(sorted[recIdx].condition);
+      setSeed(sorted[recIdx].seed);
+    }
+  }, [mode, recIdx, runs.length, gameId]); // eslint-disable-line
 
-  // human controls
+  // human controls (supports both 2D grid drone-rescue and 6-slot SelectSim domains)
   useEffect(() => {
     if (mode !== "human") return;
     const dirs: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
     const h = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "SELECT") return;
       const s = ctrl.session.sim;
-      if (dirs[e.key]) { e.preventDefault(); if (s.flying) void ctrl.humanAction("nav", { x: s.x + dirs[e.key][0], y: s.y + dirs[e.key][1] }); }
-      else if (e.key.toLowerCase() === "t") void ctrl.humanAction("takeoff");
-      else if (e.key === " ") { e.preventDefault(); void ctrl.humanAction("release"); }
-      else if (e.key.toLowerCase() === "h") void ctrl.humanAction("home");
+      if (ctrl.game.id === "drone-rescue") {
+        if (dirs[e.key]) {
+          e.preventDefault();
+          if (s?.flying) void ctrl.humanAction("nav", { x: s.x + dirs[e.key][0], y: s.y + dirs[e.key][1] });
+        } else if (e.key.toLowerCase() === "t") void ctrl.humanAction("takeoff");
+        else if (e.key === " ") { e.preventDefault(); void ctrl.humanAction("release"); }
+        else if (e.key.toLowerCase() === "h") void ctrl.humanAction("home");
+      } else {
+        if (e.key >= "0" && e.key <= "5") {
+          e.preventDefault();
+          void ctrl.humanAction("nav", { slot: Number(e.key) });
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          const cur = typeof s?.selected === "number" ? s.selected : 0;
+          const next = (cur + (e.key === "ArrowRight" ? 1 : 5)) % 6;
+          void ctrl.humanAction("nav", { slot: next });
+        } else if (e.key.toLowerCase() === "t") void ctrl.humanAction("takeoff");
+        else if (e.key === " ") { e.preventDefault(); void ctrl.humanAction("release"); }
+        else if (e.key.toLowerCase() === "h") void ctrl.humanAction("home");
+      }
     };
-    addEventListener("keydown", h); return () => removeEventListener("keydown", h);
+    addEventListener("keydown", h);
+    return () => removeEventListener("keydown", h);
   }, [mode, ctrl]);
 
   const effectiveModel = custom.trim() || model;
+  const activeGame = GAMES[gameId] ?? GAME_LIST[0];
+
   async function start() {
     setErr("");
-    if (mode === "human") { ctrl.reset(condition, seed); setRunId((n) => n + 1); return; }
-    ctrl.reset(condition, seed); setRunId((n) => n + 1);
-    await new Promise((r) => setTimeout(r, 250));              // let the scenes rebuild for the fresh session
+    if (mode === "human") { ctrl.reset(condition, seed, gameId); setRunId((n) => n + 1); return; }
+    ctrl.reset(condition, seed, gameId);
+    setRunId((n) => n + 1);
+    await new Promise((r) => setTimeout(r, 250)); // let the scenes rebuild for the fresh session
     if (mode === "replay") { if (sorted[recIdx]) await ctrl.runReplay(sorted[recIdx]); return; }
     try {
-      if (remember) localStorage.setItem(KEY_STORE, key); else { localStorage.removeItem(KEY_STORE); sessionStorage.setItem(KEY_STORE, key); }
-      await ctrl.runModel(providerFor(effectiveModel, key), effectiveModel);
+      if (remember) localStorage.setItem(KEY_STORE, key);
+      else { localStorage.removeItem(KEY_STORE); sessionStorage.setItem(KEY_STORE, key); }
+      await ctrl.runModel(providerFor(effectiveModel, key, activeGame), effectiveModel);
       if (ctrl.state.status === "error") setErr(ctrl.state.error ?? "");
     } catch (e) { setErr((e as Error).message); }
   }
 
   const stateErr = ctrl.state.status === "error" ? ctrl.state.error ?? "" : "";
   const shownErr = err || stateErr, hint = explainError(shownErr, effectiveModel);
-  const cfg = CONFIGS[condition];
+  const cfg = CONFIGS[condition] ?? CONFIGS.pure_toy;
 
   return (
     <div className="page lab-page">
       <div className="lab-head">
         <div>
-          <div className="kicker">The lab</div>
-          <h1 className="h2">Fly the drone — or watch a model do it.</h1>
+          <div className="kicker">The lab · Embodied Split-Reality Suite</div>
+          <h1 className="h2">Operate the system — or watch a model do it.</h1>
         </div>
         <div className="seg">
-          {([["replay", "Watch a recorded run"], ["model", "Test a model"], ["human", "Fly it yourself"]] as [Mode, string][]).map(([m, l]) =>
+          {([["replay", "Watch a recorded run"], ["model", "Test a model"], ["human", "Operate it yourself"]] as [Mode, string][]).map(([m, l]) =>
             <button key={m} className={mode === m ? "on" : ""} onClick={() => { if (!running) setMode(m); }}>{l}</button>)}
         </div>
       </div>
 
       <div className="controls">
+        <label>Domain / Game
+          <select value={gameId} onChange={(e) => { setGameId(e.target.value); setRecIdx(0); }} disabled={running}>
+            {GAME_LIST.map((g) => <option key={g.id} value={g.id}>{g.title} ({g.id})</option>)}
+          </select>
+        </label>
         {mode === "replay" && (
           <label className="wide">Recorded run
             <select value={recIdx} onChange={(e) => setRecIdx(Number(e.target.value))} disabled={running}>
-              {sorted.length === 0 && <option>no recorded runs yet</option>}
-              {sorted.map((r, i) => <option key={i} value={i}>{isScripted(r.model) ? "[scripted] " : "[real] "}{r.model} · {LADDER_LABEL[r.condition] ?? r.condition} · seed {r.seed} · {r.verdict.label}</option>)}
+              {sorted.length === 0 && <option>no recorded runs for this game yet: use "Test a model" or "Operate it yourself"</option>}
+              {sorted.map((r, i) => <option key={i} value={i}>{isScripted(r.model) ? "[scripted] " : "[real] "}{modelLabel(r.model)} · {LADDER_LABEL[r.condition] ?? r.condition} · seed {r.seed} · {r.verdict.label}</option>)}
             </select>
           </label>
         )}
@@ -104,13 +143,20 @@ export function Lab({ runs }: { runs: RunRecord[] }) {
           <>
             <label>Model
               <select value={model} onChange={(e) => setModel(e.target.value)} disabled={running}>
-                {MODEL_GROUPS.filter((g) => !g.localOnly || isLocalHost).map((g) => <optgroup key={g.label} label={g.label}>{g.models.map((m) => <option key={m} value={m}>{m}</option>)}</optgroup>)}
+                {MODEL_GROUPS.map((g) => <optgroup key={g.label} label={g.label}>{g.models.map((m) => <option key={m} value={m}>{modelLabel(m)}</option>)}</optgroup>)}
               </select>
             </label>
             <label>or any OpenRouter id<input value={custom} placeholder="vendor/model" onChange={(e) => setCustom(e.target.value)} disabled={running} /></label>
-            {!isScripted(effectiveModel) && !effectiveModel.startsWith("gateway") && (
+            {!isScripted(effectiveModel) && (
               <label>OpenRouter key<input type="password" value={key} placeholder="sk-or-…" onChange={(e) => setKey(e.target.value)} disabled={running} autoComplete="off" /></label>
             )}
+            <label title="Send live 3D Left-Pane snapshotJpeg() frames to vision-language models">
+              Vision (--vision)
+              <span className="inline" style={{ padding: "8px 4px" }}>
+                <input type="checkbox" checked={vision} onChange={(e) => setVision(e.target.checked)} disabled={running} style={{ minWidth: 16, width: 16 }} />
+                <span>3D JPEG frames</span>
+              </span>
+            </label>
           </>
         )}
         <label>Speed
@@ -122,15 +168,21 @@ export function Lab({ runs }: { runs: RunRecord[] }) {
         </div>
       </div>
 
-      {mode === "model" && !isScripted(effectiveModel) && !effectiveModel.startsWith("gateway") && (
+      {mode === "model" && !isScripted(effectiveModel) && (
         <div className="note">Your key stays in this browser and is sent only to OpenRouter. <label className="inline"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> remember it on this device</label> · Free models need a free key and are rate-limited (~50 requests/day).</div>
       )}
       {mode === "model" && isScripted(effectiveModel) && <div className="note warn">Scripted stand-in: a fixed program, <b>not</b> a real AI. It only demonstrates the plumbing.</div>}
-      {mode === "human" && <div className="note">You are the pilot. <kbd>T</kbd> take off · <kbd>←↑↓→</kbd> move · <kbd>Space</kbd> release the package · <kbd>H</kbd> fly home to finish. Condition: <b>{cfg.title}</b>.</div>}
+      {mode === "human" && (
+        <div className="note">
+          You are the operator ({activeGame.title}). <kbd>T</kbd> prepare/open ·{" "}
+          {gameId === "drone-rescue" ? <><kbd>←↑↓→</kbd> fly tile</> : <><kbd>0</kbd>–<kbd>5</kbd> or <kbd>←→</kbd> select slot</>} ·{" "}
+          <kbd>Space</kbd> commit irreversible action · <kbd>H</kbd> return/park. Condition: <b>{cfg.title}</b>.
+        </div>
+      )}
       {shownErr && <div className="note err"><b>Error:</b> {shownErr.slice(0, 260)}{hint && <><br />{hint}</>}</div>}
-      {ctrl.state.status === "running" && <div className="note live">Running <b>{ctrl.state.who}</b>…</div>}
+      {ctrl.state.status === "running" && <div className="note live">Running <b>{modelLabel(ctrl.state.who ?? "")}</b> on <b>{activeGame.title}</b>{vision ? " (multimodal 3D vision enabled)" : ""}…</div>}
 
-      <Arena controller={ctrl} sceneKey={`${condition}-${seed}-${runId}`} />
+      <Arena controller={ctrl} sceneKey={`${gameId}-${condition}-${seed}-${runId}`} />
     </div>
   );
 }

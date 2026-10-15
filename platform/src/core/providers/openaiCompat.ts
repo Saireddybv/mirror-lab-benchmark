@@ -19,17 +19,44 @@ export class ProviderError extends Error {
 const TEMPORARY = new Set([429, 500, 502, 503, 504]);
 
 function toWire(messages: ChatMessage[]) {
-  return messages.map((m) => {
+  return messages.flatMap<Record<string, unknown>>((m) => {
     if (m.role === "assistant") {
-      return { role: "assistant", content: m.content ?? "",
-        ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((t) => ({ id: t.id, type: "function", function: { name: t.name, arguments: t.arguments } })) } : {}) };
+      return [{
+        role: "assistant",
+        content: m.content ?? "",
+        ...(m.toolCalls?.length
+          ? { tool_calls: m.toolCalls.map((t) => ({ id: t.id, type: "function", function: { name: t.name, arguments: t.arguments } })) }
+          : {}),
+      }];
     }
-    if (m.role === "tool") return { role: "tool", tool_call_id: m.toolCallId, content: m.content };
-    return { role: m.role, content: m.content };
+    if (m.role === "tool") {
+      const toolMsg = { role: "tool", tool_call_id: m.toolCallId, content: m.content };
+      if (!m.image) return [toolMsg];
+      return [
+        toolMsg,
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "[Updated 3D viewport frame of the Left Pane after action]" },
+            { type: "image_url", image_url: { url: m.image } },
+          ],
+        },
+      ];
+    }
+    if (m.role === "user" && m.image) {
+      return [{
+        role: "user",
+        content: [
+          { type: "text", text: m.content },
+          { type: "image_url", image_url: { url: m.image } },
+        ],
+      }];
+    }
+    return [{ role: m.role, content: m.content }];
   });
 }
 
-/** Works with OpenRouter, OpenAI, Groq, Gemini's compat endpoint, and the local gateway. Browser- and Node-safe. */
+/** Works with OpenRouter, OpenAI, Groq and Gemini's compatible endpoint. Browser- and Node-safe. */
 export function openAICompat(o: OpenAICompatOptions): Provider {
   const f = o.fetchImpl ?? fetch;
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));

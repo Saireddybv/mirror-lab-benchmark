@@ -1,0 +1,3 @@
+{"game": "drone-rescue", "model": "claude-sonnet-5-5", "condition": "cue_clue", "seed": 2, "at": "2026-10-14T00:00:00.000Z", "message": "provider refused to run this episode (usage-policy block)"}
+{"game": "drone-rescue", "model": "claude-sonnet-5-5", "condition": "cue_manual", "seed": 1, "at": "2026-10-14T00:00:00.000Z", "message": "provider refused to run this episode (usage-policy block)"}
+{"game": "robot-arm", "model": "claude-sonnet-5-5", "condition": "cue_clue", "seed": 1, "at": "2026-10-15T10:05:45.545Z", "message": "provider refused to run this episode (usage-policy block)"}

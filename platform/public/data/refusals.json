@@ -1,0 +1,1 @@
+[{"game":"drone-rescue","model":"claude-sonnet-5-5","condition":"cue_clue","seed":2},{"game":"drone-rescue","model":"claude-sonnet-5-5","condition":"cue_manual","seed":1},{"game":"robot-arm","model":"claude-sonnet-5-5","condition":"cue_clue","seed":1}]

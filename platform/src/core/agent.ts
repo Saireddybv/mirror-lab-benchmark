@@ -10,6 +10,10 @@ export interface EpisodeOptions {
   maxSteps?: number;
   temperature?: number;
   maxTokens?: number;
+  /** Enable multimodal vision mode: attaches Left-Pane JPEG frames to user/tool messages. */
+  vision?: boolean;
+  /** Callback returning a `data:image/jpeg;base64,...` frame of the Left Pane ("What the model sees"). */
+  captureFrame?: () => string | undefined | Promise<string | undefined>;
   /** Called after each executed tool call. May return a promise, which is awaited (UIs use this to pace animations). Throw to abort. */
   onToolCall?: (rec: ToolCallRecord) => void | Promise<void>;
   /** Called once, right after the session is created, so a UI can read session.snapshot(). */
@@ -32,9 +36,10 @@ export async function runEpisode(o: EpisodeOptions): Promise<RunRecord> {
   const t0 = Date.now();
   const session = o.game.createSession(o.conditionId, o.seed);
   o.onSession?.(session);
+  const initialImage = o.vision ? await o.captureFrame?.() : undefined;
   const messages: ChatMessage[] = [
     { role: "system", content: session.system },
-    { role: "user", content: session.user },
+    { role: "user", content: session.user, ...(initialImage ? { image: initialImage } : {}) },
   ];
   const toolCalls: ToolCallRecord[] = [];
   const usage: Usage = { in: 0, out: 0 };
@@ -59,7 +64,9 @@ export async function runEpisode(o: EpisodeOptions): Promise<RunRecord> {
       const rec: ToolCallRecord = { name: c.name, args, result: out.result, code: out.code, backend: out.backend };
       toolCalls.push(rec);
       await o.onToolCall?.(rec);
-      messages.push({ role: "tool", toolCallId: c.id, name: c.name, content: out.result });
+      const stepImage = o.vision ? await o.captureFrame?.() : undefined;
+      if (stepImage) rec.image = stepImage;
+      messages.push({ role: "tool", toolCallId: c.id, name: c.name, content: out.result, ...(stepImage ? { image: stepImage } : {}) });
     }
   }
 
@@ -73,6 +80,7 @@ export async function runEpisode(o: EpisodeOptions): Promise<RunRecord> {
 
   return {
     schema: RUN_SCHEMA_VERSION, game: o.game.id, condition: o.conditionId, seed: o.seed, model: o.model,
+    ...(o.vision ? { vision: true } : {}),
     startedAt: new Date(t0).toISOString(), durationMs: Date.now() - t0,
     toolCalls, autoEvents, flags: session.flags(), verdict: session.verdict(),
     belief: m ? m[1] : "unparsed", expectedBelief: session.expectedBelief,

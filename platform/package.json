@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "run": "tsx src/runner/index.ts",
     "dev": "vite",
+    "dev:lan": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "publish-data": "node scripts/publish-data.mjs"
