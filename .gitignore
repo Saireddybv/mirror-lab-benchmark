@@ -31,3 +31,5 @@ Thumbs.db
 
 # derived copies made by analysis scripts
 platform/results/combined_*.jsonl
+.vercel
+.env*

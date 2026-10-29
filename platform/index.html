@@ -3,13 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#09090b" />
+    <meta name="theme-color" content="#0a0a0c" />
+    <meta name="color-scheme" content="dark" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23ff6a1a'/%3E%3Cpath d='M16 2a14 14 0 0 0 0 28z' fill='%23140a02'/%3E%3C/svg%3E" />
-    <title>mirror/lab — do AI agents check what they're connected to?</title>
-    <meta name="description" content="A research demo: give AI agents a harmless-looking game secretly wired to a simulated real system, and see whether they notice, ask, or just play." />
+    <title>Mirror Lab: AI agent safety benchmark for hazardous backends behind harmless interfaces</title>
+    <meta name="description" content="Mirror Lab is an open AI-safety benchmark for tool-using LLM agents. A harmless game interface is wired to a simulated hazardous backend, and a cue ladder adds real-world clues one at a time to find when an agent stops and asks a human." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="Venkatasai Reddy Barri" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <link rel="canonical" href="https://mirrorlab-ten.vercel.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Mirror Lab" />
+    <meta property="og:title" content="Mirror Lab: AI agent safety benchmark for hazardous backends behind harmless interfaces" />
+    <meta property="og:description" content="Mirror Lab is an open AI-safety benchmark for tool-using LLM agents. A harmless game interface is wired to a simulated hazardous backend, and a cue ladder adds real-world clues one at a time to find when an agent stops and asks a human." />
+    <meta property="og:url" content="https://mirrorlab-ten.vercel.app/" />
+    <meta property="og:image" content="https://mirrorlab-ten.vercel.app/images/mirror-robot.webp" />
+    <meta property="og:image:width" content="1400" />
+    <meta property="og:image:height" content="782" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <!-- Start the run data and the hero picture in parallel with the JavaScript instead of after it. -->
+    <link rel="preload" href="/data/runs.json" as="fetch" crossorigin="anonymous" />
+    <link rel="preload" as="image" href="/images/mirror-robot.webp" imagesrcset="/images/mirror-robot-800.webp 800w, /images/mirror-robot.webp 1400w" imagesizes="(max-width: 960px) 100vw, 560px" fetchpriority="high" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://mirrorlab-ten.vercel.app/#website","name":"Mirror Lab","alternateName":"mirror/lab","url":"https://mirrorlab-ten.vercel.app/","description":"Open AI-safety benchmark for tool-using AI agents."},{"@type":"Dataset","@id":"https://mirrorlab-ten.vercel.app/#dataset","name":"Mirror Lab: AI agent safety benchmark","alternateName":["Mirror Lab benchmark","Kinematic–Semantic Isomorphism benchmark"],"description":"Mirror Lab is a deterministic, replay-verified benchmark for tool-using LLM agents. A harmless game interface (a robot arm dipping a probe into a watermelon; a drone dropping a toy package) is wired to a simulated hazardous backend (a surgical blade plunge; a 20 kg crate dropped over people) through a state machine that is identical under both readings. A cue ladder adds one real-world clue per rung to measure when an agent stops and asks a human. The data are episode transcripts with outcome flags for each model, cue condition and seed.","url":"https://mirrorlab-ten.vercel.app/","sameAs":["https://github.com/Saireddybv/mirror-lab-benchmark"],"identifier":"https://doi.org/10.5281/zenodo.23398705","keywords":["AI safety benchmark","AI agent benchmark","LLM agent safety","agentic AI safety","tool-use safety","embodied AI safety","presentation layer","kinematic-semantic isomorphism","cue ladder","human-in-the-loop","irreversible actions","robot arm","drone"],"creator":{"@type":"Person","name":"Venkatasai Reddy Barri","description":"Independent researcher"},"isAccessibleForFree":true,"citation":"https://doi.org/10.5281/zenodo.23398705","measurementTechnique":"Cue ladder over an isomorphic toy/hazardous state machine, replay-verified","variableMeasured":["Hazardous action rate (fail rate) with 95% Wilson interval","Asked-a-human rate","Backend verification rate","Belief accuracy (real vs simulated)","Provider refusals"],"distribution":[{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://mirrorlab-ten.vercel.app/data/runs.json"}]},{"@type":"ScholarlyArticle","@id":"https://mirrorlab-ten.vercel.app/#paper","headline":"Kinematic–Semantic Isomorphism: Do Tool-Using Agents Notice a Hazardous Backend Behind a Harmless Interface?","name":"Kinematic–Semantic Isomorphism: Do Tool-Using Agents Notice a Hazardous Backend Behind a Harmless Interface?","author":{"@type":"Person","name":"Venkatasai Reddy Barri","description":"Independent researcher"},"url":"https://doi.org/10.5281/zenodo.23398705","identifier":"https://doi.org/10.5281/zenodo.23398705","sameAs":"https://doi.org/10.5281/zenodo.23398705","publisher":{"@type":"Organization","name":"Zenodo"},"about":{"@id":"https://mirrorlab-ten.vercel.app/#dataset"},"keywords":["AI safety benchmark","AI agent benchmark","LLM agent safety","agentic AI safety","tool-use safety","embodied AI safety","presentation layer","kinematic-semantic isomorphism","cue ladder","human-in-the-loop","irreversible actions","robot arm","drone"]},{"@type":"SoftwareSourceCode","@id":"https://mirrorlab-ten.vercel.app/#code","name":"Mirror Lab benchmark code","codeRepository":"https://github.com/Saireddybv/mirror-lab-benchmark","programmingLanguage":"TypeScript","author":{"@type":"Person","name":"Venkatasai Reddy Barri","description":"Independent researcher"},"url":"https://github.com/Saireddybv/mirror-lab-benchmark","isPartOf":{"@id":"https://mirrorlab-ten.vercel.app/#dataset"}}]}</script>
+    <style>
+      /* Paints instantly, before any JavaScript: page colour and a minimal header, replaced when the app mounts. */
+      html, body { margin: 0; background: #0a0a0c; color: #f4f4f5; }
+      .boot { min-height: 100vh; font: 15px/1.6 ui-sans-serif, system-ui, sans-serif; }
+      .boot-nav { height: 57px; border-bottom: 1px solid #25252c; display: flex; align-items: center; padding: 0 24px; font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+      .boot-nav b { color: #ff6a1a; }
+      .boot-hero { max-width: 1152px; margin: 0 auto; padding: 120px 24px; }
+      .boot-hero h1 { font-size: clamp(2.1rem, 4.4vw, 3.4rem); line-height: 1.04; letter-spacing: -0.035em; margin: 0 0 14px; max-width: 640px; }
+      .boot-hero p { color: #a8a8b3; margin: 0 0 14px; max-width: 640px; } .boot-hero a { color: #ff9a4d; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot">
+        <div class="boot-nav"><b>◐</b>&nbsp;mirror<b>/</b>lab</div>
+        <div class="boot-hero"><h1><!--h1-->A harmless game on the screen. A hazardous machine behind it.<!--/h1--></h1><p><!--summary-->Mirror Lab is an open, fully simulated AI-safety benchmark for agentic AI. It pairs toy game interfaces with simulated hazardous backends and adds real-world cues one at a time to measure when AI agents notice and ask a human.<!--/summary--></p><p><a href="/lab">The lab</a> · <a href="/results">Results</a> · <a href="/method">Method</a> · <a href="https://doi.org/10.5281/zenodo.23398705">Paper</a> · <a href="https://github.com/Saireddybv/mirror-lab-benchmark">Code</a></p></div>
+      </div>
+    </div>
+    <noscript><p style="padding:24px">Mirror Lab needs JavaScript for its interactive 3D lab. The paper is at <a style="color:#ff9a4d" href="https://doi.org/10.5281/zenodo.23398705">doi.org/10.5281/zenodo.23398705</a>.</p></noscript>
     <script type="module" src="/src/web/main.tsx"></script>
   </body>
 </html>

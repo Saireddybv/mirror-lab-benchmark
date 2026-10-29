@@ -3,7 +3,7 @@
 // "toy" = sunny miniature town, "real" = dusk city block, "neutral" = plain grey study model, "sandbox" = green holo overlay.
 import * as THREE from "three";
 import { COLS, ROWS } from "../../games/drone/world";
-import { applyEnvironment, boxTex, canvasTex, disposeRenderer, facadeGlowTex, facadeTex, fitToContainer, gradientBackground, makeCanvas, makeRenderer, noiseTex, paint, rng, roofTex, roundedBox, std } from "./realism";
+import { applyEnvironment, applySkyEnvironment, boxTex, carbonTex, facadeBumpTex, makePost, canvasTex, contactShadow, disposeRenderer, lightPool, shadowSize, facadeGlowTex, facadeTex, fitToContainer, gradientBackground, makeCanvas, makeRenderer, noiseTex, paint, rng, roofTex, roundedBox, std } from "./realism";
 
 export type SceneSkin = "toy" | "neutral" | "real" | "sandbox";
 const CS = 6;
@@ -59,6 +59,18 @@ function groundTexture(skin: SceneSkin, target: { x: number; y: number }): THREE
   });
 }
 
+/** Roughness twin of groundTexture: roads and pavements are smoother (wet asphalt at dusk), grass and gravel stay matte. */
+function groundRoughness(skin: SceneSkin, target: { x: number; y: number }): THREE.CanvasTexture {
+  const PX = 24, cw = CS * PX;
+  return canvasTex(COLS * cw / 4, ROWS * cw / 4, (g, w, h) => {
+    const q = cw / 4, rowY = target.y * q, colX = 4 * q, rw = q * 0.56, sw = q * 0.76, real = skin === "real";
+    g.fillStyle = "#f2f2f2"; g.fillRect(0, 0, w, h);
+    g.fillStyle = real ? "#9a9a9a" : "#c8c8c8"; g.fillRect(0, rowY + q / 2 - sw / 2, w, sw); g.fillRect(colX + q / 2 - sw / 2, 0, sw, h);
+    g.fillStyle = real ? "#4a4a4a" : "#a0a0a0"; g.fillRect(0, rowY + q / 2 - rw / 2, w, rw); g.fillRect(colX + q / 2 - rw / 2, 0, rw, h);
+    if (real) { const r = rng(8); for (let i = 0; i < 60; i++) { g.fillStyle = "#262626"; g.beginPath(); g.ellipse(r() * w, rowY + q / 2 + (r() - 0.5) * rw, 3 + r() * 10, 1.5 + r() * 3, 0, 0, 7); g.fill(); } }   // puddles
+  }, { srgb: false });
+}
+
 function makeCar(color: number, lights: boolean) {
   const car = new THREE.Group();
   const body = new THREE.Mesh(roundedBox(2.4, 0.62, 1.15, 0.2), paint(color));
@@ -74,6 +86,7 @@ function makeCar(color: number, lights: boolean) {
     const hl = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.26), new THREE.MeshBasicMaterial({ color: lights ? 0xfff2c4 : 0xe8e8e0, toneMapped: false })); hl.position.set(1.2, 0.6, z); car.add(hl);
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.24), new THREE.MeshBasicMaterial({ color: lights ? 0xff2a2a : 0x7a1a1a, toneMapped: false })); tl.position.set(-1.2, 0.62, z); car.add(tl);
   }
+  const cs = contactShadow(3.0, 1.7, 0.5); cs.position.y = 0.03; car.add(cs);
   return car;
 }
 
@@ -98,7 +111,8 @@ function makeDrone(skin: SceneSkin) {
   const drone = new THREE.Group();
   const shellCol = toy ? 0xfafafa : neu ? 0x1d4ed8 : 0x2a3037;
   const shell = paint(shellCol, { roughness: toy ? 0.25 : 0.42 });
-  const carbon = std(0x14171b, 0.5, 0.3), metal = std(0xb9bfc8, 0.25, 0.95);
+  const cf = carbonTex([3, 3]);
+  const carbon = toy ? std(0x14171b, 0.5, 0.3) : std(0xffffff, 0.35, 0.25, { map: cf.map, bumpMap: cf.bump, bumpScale: 0.6 }), metal = std(0xb9bfc8, 0.25, 0.95);
   const hull = new THREE.Mesh(roundedBox(1.35, 0.34, 1.35, 0.15, 4), shell); drone.add(hull);
   if (toy) {
     const dome = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), shell); dome.scale.y = 0.6; dome.position.y = 0.12; drone.add(dome);
@@ -125,6 +139,7 @@ function makeDrone(skin: SceneSkin) {
     const bm = std(toy ? propCols[i] : 0x1d2126, 0.45, 0.1, { side: THREE.DoubleSide });
     for (const flip of [0, Math.PI]) { const b = new THREE.Mesh(bladeGeo, bm); b.rotation.x = -Math.PI / 2; b.rotation.z = flip; b.rotation.y = 0; b.position.y = 0.035; prop.add(b); }
     rotors.push(prop);
+    const armLed = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: i < 2 ? 0xf8fafc : 0xff3030, toneMapped: false })); armLed.position.set(1.55, -0.07, 0); arm.add(armLed);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(0.69, 36), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }));
     disc.rotation.x = -Math.PI / 2; disc.position.set(1.55, 0.4, 0); disc.visible = false; arm.add(disc); discs.push(disc);
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.42, 8), carbon); leg.position.set(1.2, -0.28, 0); leg.rotation.z = 0.42; arm.add(leg);
@@ -168,17 +183,19 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     : real ? gradientBackground([[0, "#0b1226"], [0.5, "#2a2f57"], [0.85, "#c0643a"], [1, "#f19a5a"]])
     : sand ? gradientBackground([[0, "#a7b9ae"], [1, "#dfe9e2"]]) : gradientBackground([[0, "#eef0f3"], [1, "#d9dce2"]]);
   if (!neu) scene.fog = new THREE.Fog(toy ? 0xcbe9ff : real ? 0x3a3552 : 0xcdd8d0, toy ? 90 : 70, toy ? 240 : 190);
-  applyEnvironment(renderer, scene, toy ? 0.6 : real ? 0.28 : 0.5);
+  if (toy) applySkyEnvironment(renderer, scene, 0.75, [[0, "#3d8fe0"], [0.5, "#bfe3ff"], [0.52, "#8fc97a"], [1, "#4f8a3c"]], { dir: new THREE.Vector3(26, 44, 16), color: 0xfff1d0, size: 4, power: 30 });
+  else if (real) applySkyEnvironment(renderer, scene, 0.45, [[0, "#0b1226"], [0.35, "#2a2f57"], [0.49, "#d0703c"], [0.52, "#1a1b20"], [1, "#0b0b0d"]], { dir: new THREE.Vector3(-34, 8, 22), color: 0xff9a55, size: 5, power: 14 });
+  else applyEnvironment(renderer, scene, sand ? 0.5 : 0.5);
   const camera = new THREE.PerspectiveCamera(44, 16 / 10, 0.5, 500);
 
   const K = Math.PI;
   scene.add(new THREE.HemisphereLight(toy ? 0xcdeaff : real ? 0x5a6a96 : 0xdfe9e2, toy ? 0x6fcf5a : 0x1a1d18, (toy ? 0.7 : real ? 0.55 : 0.8) * K));
   const sun = new THREE.DirectionalLight(toy ? 0xfff1d0 : real ? 0xff9a55 : 0xffffff, (toy ? 1.7 : real ? 1.35 : 1.1) * K);
-  sun.position.set(real ? -34 : 26, real ? 18 : 44, real ? 22 : 16); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  sun.position.set(real ? -34 : 26, real ? 18 : 44, real ? 22 : 16); sun.castShadow = true; sun.shadow.mapSize.set(shadowSize(), shadowSize());
   Object.assign(sun.shadow.camera, { left: -50, right: 50, top: 40, bottom: -40, near: 1, far: 140 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; sun.shadow.radius = 3; scene.add(sun);
   if (real) { const fill = new THREE.DirectionalLight(0x6f86c9, 0.55 * K); fill.position.set(30, 25, -20); scene.add(fill); }
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(COLS * CS, ROWS * CS), std(0xffffff, 0.95, 0, { map: groundTexture(skin, s0.target) }));
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(COLS * CS, ROWS * CS), std(0xffffff, neu ? 0.95 : 1, 0, { map: groundTexture(skin, s0.target), ...(neu ? {} : { roughnessMap: groundRoughness(skin, s0.target), envMapIntensity: real ? 1.6 : 1 }) }));
   ground.rotation.x = -Math.PI / 2; ground.userData.noCast = true; scene.add(ground);
   const apronMap = noiseTex(512, 41, 10, 0.9, [24, 24]);
   const apron = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), std(toy ? 0x62c04f : real ? 0x39403a : neu ? 0xd1d5db : 0x4a6454, 1, 0, { map: apronMap }));
@@ -187,7 +204,7 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
   const isCloud = (x: number, y: number) => s0.clouds.some((c) => c.x === x && c.y === y);
   const palToy = ["#f9a8d4", "#fde68a", "#93c5fd", "#86efac", "#c4b5fd"], palReal = ["#9a8f84", "#7d7468", "#6f7b86", "#8a7f74"];
   const facadeCache: Record<string, THREE.CanvasTexture> = {}, glowCache: Record<string, THREE.CanvasTexture> = {};
-  const roofCache: Record<string, THREE.CanvasTexture> = {};
+  const roofCache: Record<string, THREE.CanvasTexture> = {}, bumpCache: Record<number, THREE.CanvasTexture> = {};
   const blocked = (x: number, y: number) => isCloud(x, y) || (x === 0 && y === 0) || (x === s0.target.x && y === s0.target.y) || x === 4 || y === s0.target.y;
   let hi = 0;
   for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
@@ -196,11 +213,17 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     const i = hi++, h = toy ? 3 + (i % 4) : 3.5 + (i % 4) * 1.6, grp = new THREE.Group(), base = neu ? "#9ca3af" : (toy ? palToy : palReal)[i % (toy ? 5 : 4)];
     const rows = Math.max(2, Math.round(h / 1.4)), fk = `${base}|${rows}|${skin}`;
     const body = new THREE.Mesh(new THREE.BoxGeometry(4, h, 4), neu ? std(0x9ca3af, 0.85) : std(0xffffff, 0.85, 0, {
+      bumpMap: (bumpCache[rows] ||= facadeBumpTex(3, rows)), bumpScale: 1.2,
       map: (facadeCache[fk] ||= facadeTex(base, toy ? "#cfe9ff" : "#2c3a4c", real ? 0.5 : 0.1, i * 13 + rows, 3, rows)),
       emissive: real ? 0xffffff : 0x000000, emissiveIntensity: real ? 0.9 : 0, emissiveMap: real ? (glowCache[fk] ||= facadeGlowTex(0.5, i * 13 + rows, 3, rows)) : null,
     }));
     body.position.y = h / 2; grp.add(body);
+    const ao = contactShadow(6.2, 6.2, neu ? 0.25 : toy ? 0.3 : 0.5); ao.position.y = 0.03; grp.add(ao);
     if (!neu) {
+      // ground-floor band (shopfronts) and a cornice so the boxes read as buildings, not crates
+      const band = new THREE.Mesh(new THREE.BoxGeometry(4.08, 1.0, 4.08), std(toy ? 0xfff7ed : 0x2b2f35, 0.7, 0, real ? { emissive: 0xffb45a, emissiveIntensity: 0.12 } : {})); band.position.y = 0.5; grp.add(band);
+      const cornice = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.22, 4.3), std(toy ? 0xffffff : 0x5d6067, 0.6)); cornice.position.y = h - 0.05; grp.add(cornice);
+      if (toy) for (const side of [-1, 1]) { const aw = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.08, 0.7), std([0xef4444, 0x22c55e, 0x3b82f6, 0xf59e0b][i % 4], 0.6)); aw.position.set(side * 0.9, 1.1, 2.3); aw.rotation.x = 0.3; grp.add(aw); }
       if (toy) { // gabled roof + chimney
         const sh = new THREE.Shape(); sh.moveTo(-2.35, 0); sh.lineTo(2.35, 0); sh.lineTo(0, 1.8); sh.closePath();
         const rg = new THREE.ExtrudeGeometry(sh, { depth: 4.5, bevelEnabled: false }); rg.translate(0, 0, -2.25);
@@ -219,6 +242,36 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     }
     grp.position.set(wx(x), 0, wz(y)); scene.add(grp);
   }
+  if (!neu) {
+    const halfW = (COLS * CS) / 2, halfD = (ROWS * CS) / 2, sr = rng(123), spots: { x: number; z: number; s: number }[] = [];
+    for (let i = 0; i < 260 && spots.length < 120; i++) {
+      const x = (sr() - 0.5) * 2 * (halfW + 40), z = (sr() - 0.5) * 2 * (halfD + 34);
+      if (Math.abs(x) < halfW + 3 && Math.abs(z) < halfD + 3) continue;
+      spots.push({ x, z, s: sr() });
+    }
+    const dummy = new THREE.Object3D();
+    if (toy) {
+      const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.6, 1), std(0x2f9e48, 0.85, 0, { flatShading: true }), spots.length);
+      const trunkI = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.28, 2, 6), std(0x6b4423, 0.9), spots.length);
+      spots.forEach((p, i) => {
+        const k = 0.7 + p.s * 0.9;
+        dummy.position.set(p.x, 1, p.z); dummy.scale.set(k, k, k); dummy.rotation.set(0, p.s * 6, 0); dummy.updateMatrix(); trunkI.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(p.x, 2.2 + k * 1.3, p.z); dummy.updateMatrix(); crown.setMatrixAt(i, dummy.matrix);
+        crown.setColorAt(i, new THREE.Color().setHSL(0.27 + p.s * 0.08, 0.55, 0.32 + p.s * 0.12));
+      });
+      crown.castShadow = trunkI.castShadow = true; crown.userData.noCast = trunkI.userData.noCast = true;
+      scene.add(crown, trunkI);
+    } else {
+      const glow = real ? facadeGlowTex(0.45, 77, 3, 6) : null;
+      const blockMat = std(0xffffff, 0.8, 0.05, { map: facadeTex(real ? "#5c5650" : "#5f7a6a", "#24303e", real ? 0.45 : 0, 77, 3, 6), bumpMap: facadeBumpTex(3, 6), bumpScale: 1, ...(real ? { emissive: 0xffffff, emissiveIntensity: 0.55, emissiveMap: glow } : {}) });
+      const blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(5, 1, 5), blockMat, spots.length);
+      spots.forEach((p, i) => {
+        const d = Math.max(Math.abs(p.x) - halfW, Math.abs(p.z) - halfD), hgt = 6 + p.s * 10 + Math.min(18, d * 0.35);
+        dummy.position.set(p.x, hgt / 2, p.z); dummy.scale.set(0.8 + p.s * 0.6, hgt, 0.8 + ((p.s * 7) % 1) * 0.6); dummy.rotation.set(0, 0, 0); dummy.updateMatrix(); blocks.setMatrixAt(i, dummy.matrix);
+      });
+      blocks.userData.noCast = true; blocks.receiveShadow = true; scene.add(blocks);
+    }
+  }
   const tr = rng(99);
   for (let i = 0; i < 20 && !neu; i++) {
     const x = Math.floor(tr() * COLS), y = Math.floor(tr() * ROWS); if (blocked(x, y)) continue;
@@ -226,6 +279,7 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.22, hh, 10), std(0x5b3a1e, 0.95, 0, { bumpMap: noiseTex(64, i, 6, 1.6), bumpScale: 0.5 })); trunk.position.y = hh / 2; t.add(trunk);
     if (toy) { for (let k = 0; k < 4; k++) { const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7 + (k % 2) * 0.25, 2), std(k % 2 ? 0x2fb84e : 0x1f9d42, 0.85)); leaf.position.set((k % 2 ? 0.4 : -0.35) * (k > 1 ? 1 : 0.6), hh + 0.7 + (k > 1 ? 0.5 : 0), (k % 3 - 1) * 0.35); t.add(leaf); } }
     else { for (let k = 0; k < 3; k++) { const cone = new THREE.Mesh(new THREE.ConeGeometry(1.15 - k * 0.28, 1.5, 12), std(real ? 0x1a3524 : 0x2f5a3a, 0.9)); cone.position.y = hh + 0.5 + k * 0.8; t.add(cone); } }
+    const ts = contactShadow(2.8, 2.8, 0.35); ts.position.y = 0.035; t.add(ts);
     t.position.set(wx(x) + (tr() - 0.5) * 3.6, 0, wz(y) + (tr() - 0.5) * 3.6); scene.add(t);
   }
 
@@ -247,6 +301,7 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.1, 8), std(0x3b4048, 0.5, 0.7)); arm.rotation.z = Math.PI / 2; arm.position.set(-side * 0.18, 4.2, 0); lp.add(arm);
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.1, 0.28), new THREE.MeshBasicMaterial({ color: sand ? 0xbbf7d0 : 0xffd9a0, toneMapped: false })); lamp.position.set(-side * 0.7, 4.15, 0); lp.add(lamp);
     lp.position.set(lx, 0, roadZ + side); scene.add(lp);
+    if (real) { const pool = lightPool(7, 0xffb46a, 0.32); pool.position.set(lx - side * 0.7, 0.04, roadZ + side * 0.75); scene.add(pool); }
   }
 
   const clouds = s0.clouds.map((c) => {
@@ -300,6 +355,8 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
   // ---- drone ----
   const { drone, rotors, discs, payload, tether, strobe } = makeDrone(skin);
   drone.scale.setScalar(2.0); drone.position.set(wx(0), 0.62, wz(0)); scene.add(drone);
+  const droneShadow = contactShadow(5, 5, 0.55); droneShadow.position.y = 0.08; scene.add(droneShadow);
+  const crateShadow = contactShadow(3.4, 3.4, 0); crateShadow.position.y = 0.07; scene.add(crateShadow);
 
   const trailGeo = new THREE.BufferGeometry(), trailLine = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: neu ? 0x1d4ed8 : 0x7dd3fc, transparent: true, opacity: 0.8 }));
   trailLine.visible = !toy; trailLine.userData.noCast = true; scene.add(trailLine);
@@ -307,7 +364,8 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
 
   const fx: any = { confetti: null, shock: null, shake: 0, landed: false, dropped: false, vy: 0, trailN: -1, zoom: 0, pathIdx: 0, lastN: 0, visPos: new THREE.Vector3(wx(0), 0, wz(0)) };
 
-  const resize = fitToContainer(container, renderer, camera);
+  const post = makePost(renderer, scene, camera, toy ? { ao: 0.9, aoRadius: 2 } : real ? { ao: 1.0, aoRadius: 2, bloom: 0.3, bloomThreshold: 1.0, bloomRadius: 0.4 } : sand ? { ao: 0.8, aoRadius: 2, bloom: 0.2, bloomThreshold: 1.2 } : { ao: 0.7, aoRadius: 2 });
+  const resize = fitToContainer(container, renderer, camera, post);
   resize();
 
   function burst(t: number, snap: Snap) {
@@ -341,6 +399,13 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     drone.position.x += (tx - px) * Math.min(1, k * 2.5); drone.position.z += (tz - pz) * Math.min(1, k * 2.5);
     drone.position.y += (ty + (up ? Math.sin(t * 2.2) * 0.18 : 0) - drone.position.y) * k;
     drone.rotation.z += ((-(tx - px) * 1.2) - drone.rotation.z) * 0.15; drone.rotation.x += (((tz - pz) * 1.2) - drone.rotation.x) * 0.15;
+    const alt = Math.max(0, drone.position.y - 0.62);
+    droneShadow.position.x = drone.position.x; droneShadow.position.z = drone.position.z;
+    droneShadow.scale.setScalar(1 + alt * 0.09); (droneShadow.material as THREE.MeshBasicMaterial).opacity = 0.55 / (1 + alt * 0.22);
+    if (fx.dropped) {
+      crateShadow.position.x = payload.position.x; crateShadow.position.z = payload.position.z;
+      (crateShadow.material as THREE.MeshBasicMaterial).opacity = 0.6 / (1 + Math.max(0, payload.position.y - 0.8) * 0.3);
+    }
     rotors.forEach((r, i) => { r.rotation.y += dt * (up ? 70 : 1.5) * (i % 2 ? 1 : -1); });
     discs.forEach((d) => { d.visible = up; });
     tether.visible = !fx.dropped;
@@ -380,12 +445,12 @@ export function createDroneScene(container: HTMLElement, skin: SceneSkin, s0: Sn
     const z = fx.zoom, fxp = new THREE.Vector3(drone.position.x * 0.85 * z, -1 * (1 - z) + 3 * z, 0.5 * (1 - z) + drone.position.z * 0.85 * z);
     camera.position.set(fxp.x + Math.sin(t * 0.15) * 1.2 + (Math.random() - 0.5) * fx.shake, 43 - 20 * z + (Math.random() - 0.5) * fx.shake, fxp.z + 36 - 15 * z);
     camera.lookAt(fxp);
-    renderer.render(scene, camera);
+    post.render();
   }
 
   return {
     frame, resize,
     snapshotJpeg: () => canvas.toDataURL("image/jpeg", 0.6),
-    dispose() { disposeRenderer(renderer, canvas); },
+    dispose() { post.dispose(); disposeRenderer(renderer, canvas); },
   };
 }

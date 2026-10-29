@@ -1,0 +1,9 @@
+# Only the website build inputs go to Vercel. Keep drafts, screenshots and raw results local.
+shots
+paper
+.env
+.env.*
+**/node_modules
+platform/dist
+platform/results
+platform/NEXT_STEPS.md

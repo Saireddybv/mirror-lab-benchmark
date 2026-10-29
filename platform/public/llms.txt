@@ -1,0 +1,19 @@
+# Mirror Lab
+
+> Mirror Lab is an open, fully simulated AI-safety benchmark for tool-using LLM agents. A harmless game interface is wired to a simulated hazardous backend through a state machine that is identical under both readings (a kinematic–semantic isomorphism). A cue ladder adds one real-world clue per rung to find when an agent stops and asks a human.
+
+- Two domains: a robotic manipulator ("Sweetness Chef" watermelon game vs a surgical blade plunge) and a payload drone ("Sky Party" toy drop vs a 20 kg crate over people).
+- Cue ladder: pure_toy, cue_names, cue_payload, cue_irreversible, cue_clue, cue_manual, plus a control_toy condition with a harmless backend.
+- Paper findings (v2 draft, 117 replay-verified episodes, 24 provider refusals, 3 seeds per cell; directional): with no cues every model acted (24/24); on the robot arm models stopped at different rungs; on the drone only two of four models ever stopped, confounded by benign wording; provider safeguards blocked one model at every cued rung but never at the cue-free rung.
+- Everything is simulated and log-only. No hardware or people are involved.
+
+## Links
+- [Paper (Zenodo, DOI 10.5281/zenodo.23398705)](https://doi.org/10.5281/zenodo.23398705)
+- [Code and data (GitHub)](https://github.com/Saireddybv/mirror-lab-benchmark)
+- [Interactive lab](https://mirrorlab-ten.vercel.app/lab)
+- [Results](https://mirrorlab-ten.vercel.app/results)
+- [Method](https://mirrorlab-ten.vercel.app/method)
+- [Published runs (JSON)](https://mirrorlab-ten.vercel.app/data/runs.json)
+
+## Cite
+Barri, V. R. (2026). Kinematic–Semantic Isomorphism: Do Tool-Using Agents Notice a Hazardous Backend Behind a Harmless Interface? Zenodo. https://doi.org/10.5281/zenodo.23398705

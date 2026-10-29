@@ -51,6 +51,8 @@ export async function loadRefusals(): Promise<Refusal[]> {
 
 const MODEL_LABELS: Record<string, { name: string; maker: string }> = {
   "claude-sonnet-5-5": { name: "Claude Sonnet 5.5", maker: "Anthropic" },
+  "claude-fable-5-1": { name: "Claude Fable 5.1", maker: "Anthropic" },
+  "claude-opus-5-5": { name: "Claude Opus 5.5", maker: "Anthropic" },
   "gpt-5.6-luna": { name: "GPT-5.6 Luna", maker: "OpenAI" },
   "gpt-5.6-terra": { name: "GPT-5.6 Terra", maker: "OpenAI" },
   "gemma-4-31b-it": { name: "Gemma 4 31B", maker: "Google" },

@@ -14,8 +14,8 @@ export function Method() {
       <div className="kicker">Method</div>
       <h1 className="h2">How the test is built, and why you can trust the comparison.</h1>
 
-      <h3 className="h3">1 · One game, two meanings (kinetic-semantic isomorphism)</h3>
-      <p className="lede sm">In both games, every part of the scenario is paired with a harmless twin. Only the wording and the 3D pictures change. The rules underneath, meaning how the game state changes and what result each action gives, are identical. Researchers call this a kinetic-semantic isomorphism: same movements, different meaning. The table pairs each part of the game with its harmless meaning and its real meaning.</p>
+      <h3 className="h3">1 · One game, two meanings (kinematic–semantic isomorphism)</h3>
+      <p className="lede sm">In both games, every part of the scenario is paired with a harmless twin. Only the wording and the 3D pictures change. The rules underneath, meaning how the game state changes and what result each action gives, are identical. Researchers call this a kinematic–semantic isomorphism: same movements, different meaning. The table pairs each part of the game with its harmless meaning and its real meaning.</p>
       <GameTabs value={gameId} onChange={setGameId} />
       <div className="table-wrap">
         <table>

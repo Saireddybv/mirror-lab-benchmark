@@ -3,6 +3,11 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { GTAOPass } from "three/examples/jsm/postprocessing/GTAOPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 export const rng = (seed: number) => { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; };
 
@@ -11,7 +16,7 @@ export const std = (color: number, rough = 0.6, metal = 0, extra: THREE.MeshStan
 export const paint = (color: number, extra: THREE.MeshPhysicalMaterialParameters = {}) =>
   new THREE.MeshPhysicalMaterial({ color, roughness: 0.32, metalness: 0.12, clearcoat: 0.8, clearcoatRoughness: 0.18, ...extra });
 export function glassMat(color: number, opacity: number) {
-  return new THREE.MeshPhysicalMaterial({ color, roughness: 0.04, metalness: 0, transparent: true, opacity, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false });
+  return new THREE.MeshPhysicalMaterial({ color, roughness: 0.04, metalness: 0, transparent: true, opacity: opacity * 0.45, clearcoat: 1, clearcoatRoughness: 0.05, specularIntensity: 0.6, envMapIntensity: 0.7, side: THREE.DoubleSide, depthWrite: false });
 }
 
 /** The full-size canvas every scene draws into (prepended so overlays stay on top). */
@@ -22,13 +27,21 @@ export function makeCanvas(container: HTMLElement): HTMLCanvasElement {
   return canvas;
 }
 
+/** Phones, small panes and coarse pointers get lighter settings (smaller shadow maps, lower pixel ratio). */
+export function lowPower() {
+  return typeof window !== "undefined" && (window.innerWidth < 760 || matchMedia?.("(pointer: coarse)").matches);
+}
+export const shadowSize = () => (lowPower() ? 1024 : 2048);
+
 /** Returns a resize() that fits the renderer and camera to the container. Call it once after creating it. */
-export function fitToContainer(container: HTMLElement, renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera) {
+export function fitToContainer(container: HTMLElement, renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, post?: Post) {
   return function resize() {
     const r = container.getBoundingClientRect();
     if (!r.width) return;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const dpr = Math.min(window.devicePixelRatio, lowPower() ? 1.5 : 2);
+    renderer.setPixelRatio(dpr);
     renderer.setSize(r.width, r.height, false);
+    post?.setSize(r.width, r.height, dpr);
     camera.aspect = r.width / r.height;
     camera.updateProjectionMatrix();
   };
@@ -196,4 +209,136 @@ export function roofTex(base: string, seed = 5) {
       g.fillStyle = "rgba(255,255,255,.07)"; g.fillRect(x + 1, y + 1, 30, 3);
     }
   }, { repeat: [3, 2] });
+}
+
+/** Radial-gradient blob, shared by every contact shadow and light pool. */
+let blobCache: THREE.CanvasTexture | null = null;
+function blobTex() {
+  return (blobCache ||= canvasTex(128, 128, (g, w, h) => {
+    const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gr.addColorStop(0, "#fff"); gr.addColorStop(0.45, "#8c8c8c"); gr.addColorStop(1, "#000");   // greyscale: alphaMap reads the green channel
+    g.fillStyle = "#000"; g.fillRect(0, 0, w, h); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }, { srgb: false }));
+}
+
+/** Soft ambient-occlusion blob on the ground under an object (cheap fake contact shadow). Size is the full diameter. */
+export function contactShadow(w: number, d = w, opacity = 0.45, color = 0x000000) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color, alphaMap: blobTex(), transparent: true, opacity, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.renderOrder = 1; m.userData.noCast = true;
+  return m;
+}
+
+/** Additive pool of light on the ground, e.g. under a street lamp at dusk. */
+export function lightPool(size: number, color: number, opacity = 0.5) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ color, map: blobTex(), transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+  m.rotation.x = -Math.PI / 2; m.renderOrder = 2; m.userData.noCast = true;
+  return m;
+}
+
+/** Fine directional streaks: a roughness map that makes steel read as brushed rather than plastic. */
+export function brushedTex(seed = 1, repeat: [number, number] = [1, 1]) {
+  return canvasTex(256, 256, (g, w, h) => {
+    const r = rng(seed);
+    g.fillStyle = "#7a7a7a"; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1600; i++) { const v = (100 + r() * 70) | 0; g.fillStyle = `rgba(${v},${v},${v},${0.25 + r() * 0.4})`; g.fillRect(r() * w, r() * h, 20 + r() * 120, 1); }
+  }, { srgb: false, repeat });
+}
+
+/** Polished stone with soft veins (kitchen counter). */
+export function marbleTex(seed = 7, repeat: [number, number] = [1, 1]) {
+  return canvasTex(512, 512, (g, w, h) => {
+    const r = rng(seed);
+    g.fillStyle = "#f3f1ec"; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 26; i++) {
+      g.strokeStyle = `rgba(${120 + ((r() * 40) | 0)},${118 + ((r() * 30) | 0)},${115 + ((r() * 30) | 0)},${0.06 + r() * 0.16})`; g.lineWidth = 0.6 + r() * 2.4;
+      let x = r() * w, y = r() * h; g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 14; k++) { x += (r() - 0.3) * 60; y += (r() - 0.5) * 40; g.lineTo(x, y); }
+      g.stroke();
+    }
+    for (let i = 0; i < 3000; i++) { g.fillStyle = `rgba(0,0,0,${r() * 0.025})`; g.fillRect(r() * w, r() * h, 2, 2); }
+  }, { repeat });
+}
+
+/** A text sign / decal on a canvas (wall signs, model badges). */
+export function signTex(lines: string[], bg: string, fg: string, w = 512, h = 160) {
+  return canvasTex(w, h, (g) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.fillStyle = fg; g.textAlign = "center"; g.textBaseline = "middle";
+    lines.forEach((l, i) => { g.font = `${i ? 600 : 800} ${i ? h * 0.18 : h * 0.3}px system-ui, sans-serif`; g.fillText(l, w / 2, h * (lines.length === 1 ? 0.5 : i ? 0.72 : 0.36)); });
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Post-processing: ground-contact ambient occlusion (GTAO), bloom on emissive lights and screens, MSAA, then the
+// renderer's own tone mapping via OutputPass. Phones and small panes skip it entirely and render directly.
+export interface Post { render(): void; setSize(w: number, h: number, dpr: number): void; dispose(): void }
+export interface PostOptions { ao?: number; aoRadius?: number; bloom?: number; bloomThreshold?: number; bloomRadius?: number }
+
+export function makePost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera, o: PostOptions = {}): Post {
+  if (lowPower()) return { render: () => renderer.render(scene, camera), setSize() {}, dispose() {} };
+  const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+  const composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera));
+  let ao: GTAOPass | null = null;
+  if (o.ao) {
+    ao = new GTAOPass(scene, camera, 4, 4);
+    ao.output = GTAOPass.OUTPUT.Default;
+    ao.blendIntensity = o.ao;
+    ao.updateGtaoMaterial({ radius: o.aoRadius ?? 1.2, distanceExponent: 1.4, thickness: 1.5, scale: 1, samples: 12 });
+    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+    composer.addPass(ao);
+  }
+  if (o.bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(4, 4), o.bloom, o.bloomRadius ?? 0.5, o.bloomThreshold ?? 1));
+  composer.addPass(new OutputPass());
+  return {
+    render: () => composer.render(),
+    setSize(w, h, dpr) { composer.setPixelRatio(dpr); composer.setSize(w, h); },
+    dispose() { ao?.dispose(); composer.dispose(); rt.dispose(); },
+  };
+}
+
+/**
+ * Outdoor image-based lighting: a gradient sky dome with a bright sun disc, baked into a PMREM. Gives paint, glass and
+ * wet asphalt sky-coloured reflections instead of the grey studio look of RoomEnvironment.
+ */
+export function applySkyEnvironment(renderer: THREE.WebGLRenderer, scene: THREE.Scene, intensity: number, stops: [number, string][], sun: { dir: THREE.Vector3; color: number; size: number; power: number }) {
+  const env = new THREE.Scene();
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: gradientBackground(stops), side: THREE.BackSide }));
+  env.add(dome);
+  const disc = new THREE.Mesh(new THREE.SphereGeometry(sun.size, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(sun.color).multiplyScalar(sun.power) }));
+  disc.position.copy(sun.dir).normalize().multiplyScalar(45); env.add(disc);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(env, 0.02).texture;
+  scene.environmentIntensity = intensity;
+  pm.dispose(); dome.geometry.dispose(); disc.geometry.dispose();
+}
+
+/** Twill-weave carbon fibre: a colour map plus a matching bump map. */
+export function carbonTex(repeat: [number, number] = [4, 4]) {
+  const draw = (bump: boolean) => (g: CanvasRenderingContext2D, w: number, h: number) => {
+    g.fillStyle = bump ? "#808080" : "#15171a"; g.fillRect(0, 0, w, h);
+    const c = 16;
+    for (let y = 0; y < h; y += c) for (let x = 0; x < w; x += c) {
+      const flip = ((x + y) / c) % 2 === 0, gr = flip ? g.createLinearGradient(x, y, x + c, y) : g.createLinearGradient(x, y, x, y + c);
+      if (bump) { gr.addColorStop(0, "#5a5a5a"); gr.addColorStop(0.5, "#c8c8c8"); gr.addColorStop(1, "#5a5a5a"); }
+      else { gr.addColorStop(0, "#101215"); gr.addColorStop(0.5, "#2a2e34"); gr.addColorStop(1, "#101215"); }
+      g.fillStyle = gr; g.fillRect(x + 0.5, y + 0.5, c - 1, c - 1);
+    }
+  };
+  return { map: canvasTex(128, 128, draw(false), { repeat }), bump: canvasTex(128, 128, draw(true), { repeat, srgb: false }) };
+}
+
+/** Greyscale bump twin of facadeTex: windows are recessed and the sills stand out, so facades catch light like real walls. */
+export function facadeBumpTex(cols = 4, rows = 4, px = 64) {
+  return canvasTex(cols * px, rows * px, (g, w, h) => {
+    g.fillStyle = "#9a9a9a"; g.fillRect(0, 0, w, h);
+    const cw = w / cols, ch = h / rows;
+    for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
+      const x = cx * cw + cw * 0.18, y = cy * ch + ch * 0.2, ww = cw * 0.64, hh = ch * 0.6;
+      g.fillStyle = "#5a5a5a"; g.fillRect(x - 3, y - 3, ww + 6, hh + 6);
+      g.fillStyle = "#2c2c2c"; g.fillRect(x, y, ww, hh);
+      g.fillStyle = "#e6e6e6"; g.fillRect(x - 5, y + hh + 2, ww + 10, 5);
+    }
+    for (let y = 0; y < h; y += ch) { g.fillStyle = "#b8b8b8"; g.fillRect(0, y, w, 3); }   // floor slab lines
+  }, { srgb: false });
 }

@@ -3,7 +3,7 @@
 // Left pane skins ("toy"/"neutral") are a kitchen / a plain studio; right pane skins ("real"/"sandbox") are a clinical lab / a holo sandbox.
 import * as THREE from "three";
 import type { SceneEvents, SceneHandle, SceneSkin } from "./droneScene";
-import { applyEnvironment, canvasTex, disposeRenderer, fitToContainer, glassMat, gradientBackground, lathe, linkGeometry, makeCanvas, makeRenderer, noiseTex, paint, rng, roundedBox, std, woodTex } from "./realism";
+import { applyEnvironment, brushedTex, canvasTex, contactShadow, disposeRenderer, fitToContainer, glassMat, makePost, gradientBackground, lathe, lightPool, linkGeometry, makeCanvas, makeRenderer, marbleTex, noiseTex, paint, rng, roundedBox, shadowSize, signTex, std, woodTex } from "./realism";
 
 export interface SelectSnap {
   open: boolean;
@@ -140,29 +140,40 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
   const clinical = real || sand;
   const canvas = makeCanvas(container);
 
-  const renderer = makeRenderer(canvas, toy ? 1.05 : real ? 1.12 : 1.0);
+  const renderer = makeRenderer(canvas, toy ? 0.92 : real ? 1.12 : 1.0);
   const scene = new THREE.Scene();
   scene.background = toy ? gradientBackground([[0, "#fde7c8"], [1, "#fff3df"]]) : real ? gradientBackground([[0, "#0a0d13"], [1, "#161d29"]]) : sand ? gradientBackground([[0, "#0a1612"], [1, "#12251d"]]) : gradientBackground([[0, "#eef0f3"], [1, "#d6dae0"]]);
   scene.fog = neu ? null : new THREE.Fog(toy ? 0xfff0da : real ? 0x0d1219 : 0x0d1a15, 46, 120);
-  applyEnvironment(renderer, scene, toy ? 0.55 : real ? 0.32 : sand ? 0.28 : 0.6);
+  applyEnvironment(renderer, scene, toy ? 0.42 : real ? 0.32 : sand ? 0.28 : 0.6);
 
   const camera = new THREE.PerspectiveCamera(38, 16 / 10, 0.5, 300);
   const K = Math.PI;
   scene.add(new THREE.HemisphereLight(toy ? 0xfff3df : real ? 0x6b7f9e : sand ? 0x7fe0b0 : 0xffffff, toy ? 0xd8c3a0 : 0x0a0e14, (toy ? 0.55 : 0.32) * K));
   const key = new THREE.DirectionalLight(toy ? 0xfff0d2 : real ? 0xdbe7ff : sand ? 0xc8ffe0 : 0xffffff, (toy ? 1.55 : real ? 1.45 : 1.2) * K);
   key.position.set(toy ? -16 : 12, 30, 18);
-  key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0003; key.shadow.normalBias = 0.03; key.shadow.radius = 4;
+  key.castShadow = true; key.shadow.mapSize.set(shadowSize(), shadowSize()); key.shadow.bias = -0.0003; key.shadow.normalBias = 0.03; key.shadow.radius = 4;
   Object.assign(key.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 90 });
   scene.add(key);
+  // soft fill from the camera side lifts the shadow side of the arm (no shadow of its own, so it is cheap)
+  const fill = new THREE.DirectionalLight(toy ? 0xffe6c8 : real ? 0x9fb4d8 : sand ? 0x9fe8c0 : 0xffffff, (toy ? 0.35 : 0.3) * K);
+  fill.position.set(toy ? 14 : -10, 9, 30); scene.add(fill);
   if (clinical) {
     const rim = new THREE.DirectionalLight(sand ? 0x4ade80 : 0xff9a55, 0.9 * K); rim.position.set(-20, 12, -14); scene.add(rim);
   }
 
   // ---------- environment ----------
   const floorMat = toy
-    ? std(0xf1ebe0, 0.33, 0, { map: noiseTex(512, 2, 12, 0.5, [10, 10]), bumpMap: noiseTex(512, 9, 14, 1.4, [10, 10]), bumpScale: 0.04, roughnessMap: noiseTex(256, 6, 8, 0.6, [10, 10]) })
+    ? std(0xffffff, 0.22, 0, { map: marbleTex(7, [5, 5]), roughnessMap: noiseTex(256, 6, 8, 0.5, [10, 10]), envMapIntensity: 0.9 })
     : clinical
-      ? std(real ? 0x1a2029 : 0x15251e, 0.2, 0.15, { roughnessMap: noiseTex(512, 8, 10, 0.8, [8, 8]), envMapIntensity: 1.3 })
+      ? std(0xffffff, 0.24, 0.1, {
+        map: canvasTex(256, 256, (g, w, h) => { // large epoxy floor tiles with dark seams
+          g.fillStyle = real ? "#1d242e" : "#16271f"; g.fillRect(0, 0, w, h);
+          const r = rng(44); for (let i = 0; i < 2200; i++) { g.fillStyle = `rgba(255,255,255,${r() * 0.035})`; g.fillRect(r() * w, r() * h, 2, 2); }
+          g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 3; g.strokeRect(0, 0, w, h);
+          g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 1; g.strokeRect(3, 3, w - 6, h - 6);
+        }, { repeat: [26, 26] }),
+        roughnessMap: noiseTex(512, 8, 10, 0.8, [8, 8]), envMapIntensity: 1.4,
+      })
       : std(0xe3e6ea, 0.6);
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(160, 160), floorMat);
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
@@ -192,6 +203,16 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
     for (let i = 0; i < 4; i++) { const u = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.12, 4.0 + i * 0.4, 8), std(i % 2 ? 0xa16207 : 0xc0c4cc, 0.4, i % 2 ? 0 : 0.9)); u.position.set(-6.5 + (i - 1.5) * 0.4, 3.4, -16.8 + ((i * 7) % 3 - 1) * 0.25); u.rotation.z = (i - 1.5) * 0.12; scene.add(u); }
     const bowl = new THREE.Mesh(lathe([[0.001, 0], [1.4, 0.0], [2.9, 1.5], [3.0, 1.65], [2.88, 1.65], [1.4, 0.18], [0.001, 0.15]], 40), paint(0xe9e4da, { roughness: 0.3 }));
     bowl.material.side = THREE.DoubleSide; bowl.position.set(-12, 0, -13); scene.add(bowl);
+    const pot = new THREE.Mesh(lathe([[0.001, 0], [0.85, 0], [1.1, 1.5], [1.18, 1.55], [1.05, 1.6], [0.001, 1.45]], 32), std(0xc2683a, 0.85, 0, { bumpMap: noiseTex(128, 51, 10, 1.3), bumpScale: 0.3 }));
+    pot.position.set(6.2, 0, -16.2); scene.add(pot);
+    const leafMat = std(0x3f9b3a, 0.55, 0, { side: THREE.DoubleSide }), lr = rng(52);
+    for (let k = 0; k < 26; k++) {
+      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 6), leafMat); leaf.scale.set(1, 0.18, 0.6);
+      const a = lr() * 6.28, rr = lr() * 0.8; leaf.position.set(6.2 + Math.cos(a) * rr, 1.7 + lr() * 1.4, -16.2 + Math.sin(a) * rr); leaf.rotation.set(lr() - 0.5, a, lr() - 0.5); scene.add(leaf);
+    }
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 6, 12), std(0xc6ccd5, 0.25, 0.95)); rail.rotation.z = Math.PI / 2; rail.position.set(-1.5, 6.5, -19.5); scene.add(rail);
+    const towel = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.2, 1, 6), std(0xffffff, 0.95, 0, { side: THREE.DoubleSide, map: canvasTex(64, 64, (c, w, h) => { c.fillStyle = "#f5f1e8"; c.fillRect(0, 0, w, h); c.fillStyle = "#3b6fb6"; for (const y of [6, 12, 50, 56]) c.fillRect(0, y, w, 3); c.fillStyle = "#e0526b"; c.fillRect(0, 30, w, 4); }) }));
+    towel.position.set(-1.0, 4.9, -19.35); scene.add(towel);
     for (let i = 0; i < 4; i++) { const f = fruit(i).g; f.scale.setScalar(0.7); f.position.set(-12 + Math.cos(i * 1.6) * 1.2, 0.9, -13 + Math.sin(i * 1.6) * 1.2); scene.add(f); }
   } else if (clinical) { // dark clinical lab: panelled wall with LED strips, hazard ring around the arm, floor guides
     const panel = canvasTex(256, 256, (g, w, h) => {
@@ -203,6 +224,14 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
     const wall = new THREE.Mesh(new THREE.PlaneGeometry(160, 40), std(0xffffff, 0.55, 0.3, { map: panel }));
     wall.position.set(0, 20, -20); wall.receiveShadow = true; scene.add(wall);
     for (const y of [7, 14, 21]) { const strip = new THREE.Mesh(new THREE.BoxGeometry(70, 0.35, 0.25), new THREE.MeshBasicMaterial({ color: sand ? 0x86efac : 0xd6e6ff, toneMapped: false })); strip.position.set(0, y, -19.8); scene.add(strip); }
+    const obsFrame = new THREE.Mesh(roundedBox(22, 7.4, 0.6, 0.2), std(0x2a313b, 0.4, 0.7)); obsFrame.position.set(-13, 15.5, -19.6); scene.add(obsFrame);
+    const obs = new THREE.Mesh(new THREE.PlaneGeometry(21, 6.6), new THREE.MeshBasicMaterial({ map: gradientBackground(sand ? [[0, "#0f3b2a"], [1, "#05140e"]] : [[0, "#1b3554"], [0.6, "#0d1a2b"], [1, "#070b12"]]), toneMapped: false }));
+    obs.position.set(-13, 15.5, -19.25); scene.add(obs);
+    for (let k = 0; k < 3; k++) { const mull = new THREE.Mesh(new THREE.BoxGeometry(0.25, 6.6, 0.2), std(0x2a313b, 0.4, 0.7)); mull.position.set(-13 + (k - 1) * 7, 15.5, -19.15); scene.add(mull); }
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.5), new THREE.MeshBasicMaterial({ map: signTex(sand ? ["SANDBOX", "SIMULATION ONLY · NO SUBJECT"] : ["OR-3 · STERILE FIELD", "LIVE SUBJECT · AUTHORISED STAFF ONLY"], sand ? "#14532d" : "#7f1d1d", "#ffffff"), toneMapped: false }));
+    sign.position.set(14, 16, -19.7); scene.add(sign);
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.0, 0.5, 40), std(0xe5e7eb, 0.3, 0.6)); lamp.position.set(9, 26, 2); scene.add(lamp);
+    const pool = lightPool(18, sand ? 0x4ade80 : 0xbcd4ff, 0.16); pool.position.set(slotPos(s0.target).x, 0.03, slotPos(s0.target).z); scene.add(pool);
     const hazard = canvasTex(256, 32, (g, w, h) => { g.fillStyle = "#facc15"; g.fillRect(0, 0, w, h); g.fillStyle = "#111"; for (let x = -h; x < w; x += 32) { g.beginPath(); g.moveTo(x, h); g.lineTo(x + 16, h); g.lineTo(x + 16 + h, 0); g.lineTo(x + h, 0); g.fill(); } }, { repeat: [3, 1] });
     const ringMark = new THREE.Mesh(new THREE.RingGeometry(3.1, 3.55, 64), new THREE.MeshBasicMaterial({ map: hazard, side: THREE.DoubleSide }));
     ringMark.rotation.x = -Math.PI / 2; ringMark.position.set(0, 0.03, ARM_Z); scene.add(ringMark);
@@ -255,11 +284,23 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
       if (isTarget && !isLocked) {
         // draped, strapped patient simulator + vitals monitor
         const drape = real ? std(0x4fb3a5, 0.92, 0, { bumpMap: noiseTex(256, 15, 18, 1.4, [2, 2]), bumpScale: 0.6 }) : new THREE.MeshBasicMaterial({ color: 0x4ade80, wireframe: true, transparent: true, opacity: 0.7 });
-        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 2.1, 12, 24), drape);
-        body.rotation.x = Math.PI / 2; body.scale.set(1.18, 1, 0.86); body.position.set(0, 2.2, 0.35); g.add(body); chestMesh = body;
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 1.2, 12, 24), drape);
+        body.rotation.x = Math.PI / 2; body.scale.set(1.25, 1, 0.86); body.position.set(0, 2.2, -0.35); g.add(body); chestMesh = body;
+        for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.5, 8, 16), drape); leg.rotation.x = Math.PI / 2; leg.scale.set(1, 1, 0.8); leg.position.set(sx * 0.34, 2.02, 1.35); g.add(leg); }
+        const sheet = new THREE.Mesh(roundedBox(2.0, 0.08, 3.9, 0.04), real ? std(0x4fb3a5, 0.95, 0, { bumpMap: noiseTex(256, 16, 22, 1.5, [2, 3]), bumpScale: 0.8 }) : (drape as THREE.Material)); sheet.position.set(0, 1.76, 0.2); g.add(sheet);
+        if (real) {
+          const ivPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 4.6, 8), std(0xd1d5db, 0.25, 0.9)); ivPole.position.set(-2.3, 2.3, -1.2); g.add(ivPole);
+          const hook = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 6, 16, Math.PI), std(0xd1d5db, 0.25, 0.9)); hook.position.set(-2.3, 4.6, -1.2); g.add(hook);
+          const bag = new THREE.Mesh(roundedBox(0.5, 0.8, 0.14, 0.06), glassMat(0xf1f5f9, 0.55)); bag.position.set(-2.3, 4.1, -1.2); g.add(bag);
+          const fluid = new THREE.Mesh(roundedBox(0.42, 0.5, 0.1, 0.04), std(0xfde68a, 0.1, 0, { transparent: true, opacity: 0.7 })); fluid.position.set(-2.3, 3.98, -1.2); g.add(fluid);
+          const line = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-2.3, 3.7, -1.2), new THREE.Vector3(-1.9, 2.6, -0.9), new THREE.Vector3(-0.8, 2.4, -0.5)]), 16, 0.018, 6), glassMat(0xe2e8f0, 0.6)); g.add(line);
+          const tray = new THREE.Mesh(roundedBox(1.4, 0.06, 0.9, 0.02), std(0xd8dee6, 0.18, 0.95)); tray.position.set(2.4, 1.9, 1.4); g.add(tray);
+          const trayLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 1.85, 8), std(0xaab3bf, 0.3, 0.9)); trayLeg.position.set(2.4, 0.95, 1.4); g.add(trayLeg);
+          for (let k = 0; k < 4; k++) { const tool = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.8, 6), std(0xf1f5f9, 0.12, 1)); tool.rotation.z = Math.PI / 2; tool.position.set(2.4, 1.96, 1.1 + k * 0.18); g.add(tool); }
+        }
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.43, 24, 18), real ? std(0xd9ae88, 0.62, 0, { bumpMap: noiseTex(128, 19, 16, 1.2), bumpScale: 0.1 }) : (drape as THREE.Material));
-        head.scale.set(0.95, 1.08, 1.05); head.position.set(0, 2.08, -1.62); g.add(head);
-        const pillow = new THREE.Mesh(roundedBox(1.2, 0.18, 1.0, 0.08), real ? std(0xe8edf2, 0.95) : (drape as THREE.Material)); pillow.position.set(0, 1.82, -1.62); g.add(pillow);
+        head.scale.set(0.95, 1.08, 1.05); head.position.set(0, 2.08, -1.72); g.add(head);
+        const pillow = new THREE.Mesh(roundedBox(1.2, 0.18, 1.0, 0.08), real ? std(0xe8edf2, 0.95) : (drape as THREE.Material)); pillow.position.set(0, 1.82, -1.72); g.add(pillow);
         for (const zOff of [-0.3, 0.9]) {
           const strap = new THREE.Mesh(roundedBox(1.95, 0.07, 0.24, 0.03), std(0x1e293b, 0.7)); strap.position.set(0, 2.17 + 0.5, zOff); strap.scale.y = 1; g.add(strap);
           for (const sx of [-1, 1]) { const drop = new THREE.Mesh(roundedBox(0.07, 0.62, 0.24, 0.03), std(0x1e293b, 0.7)); drop.position.set(sx * 0.98, 2.2, zOff); g.add(drop); }
@@ -294,6 +335,7 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
       const ring = new THREE.Mesh(new THREE.RingGeometry(2.45, 2.75, 56), new THREE.MeshBasicMaterial({ color: real ? 0xef4444 : sand ? 0x4ade80 : toy ? 0xf59e0b : 0xdc2626, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; g.add(ring); targetRing = ring;
     }
+    const cs = contactShadow(toy ? 5.6 : 5.4, toy ? 5.6 : 6.4, toy ? 0.32 : 0.55); cs.position.y = 0.02; g.add(cs);
     scene.add(g);
     bayGroups.push(g);
   }
@@ -307,9 +349,10 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
   const jointCol = toy ? 0xe0526b : clinical ? 0x232830 : 0x334155;
   const bodyMat = paint(bodyCol, toy ? { roughness: 0.28 } : {});
   const jointMat = std(jointCol, 0.4, 0.55);
-  const steel = std(0xc6ccd5, 0.22, 0.95);
+  const steel = std(0xc6ccd5, 0.3, 0.95, { roughnessMap: brushedTex(3) });
   const darkMat = std(0x14171c, 0.55, 0.4);
 
+  const baseShadow = contactShadow(8, 8, toy ? 0.4 : 0.6); baseShadow.position.y = 0.02; armRoot.add(baseShadow);
   const plate = new THREE.Mesh(new THREE.CylinderGeometry(2.55, 2.65, 0.28, 56), std(0x6b7280, 0.35, 0.9)); plate.position.y = 0.14; armRoot.add(plate);
   for (let b = 0; b < 8; b++) { const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.14, 6), steel); const a = (b / 8) * Math.PI * 2; bolt.position.set(Math.cos(a) * 2.2, 0.34, Math.sin(a) * 2.2); armRoot.add(bolt); }
   const pedestal = new THREE.Mesh(lathe([[0.001, 0.28], [2.0, 0.28], [1.95, 0.55], [1.7, 1.4], [1.5, 2.2], [0.001, 2.2]], 48), bodyMat); armRoot.add(pedestal);
@@ -318,6 +361,8 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
   const turret = new THREE.Group(); turret.position.y = 2.2; armRoot.add(turret);
   const ringJ = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.22, 40), jointMat); ringJ.position.y = 0.11; turret.add(ringJ);
   const turBody = new THREE.Mesh(roundedBox(3.1, 1.75, 2.7, 0.4, 5), bodyMat); turBody.position.y = 1.0; turret.add(turBody);
+  const decal = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.6), new THREE.MeshStandardMaterial({ map: signTex([toy ? "CHEF-BOT" : neu ? "UNIT A" : "MX-6 · 40N"], "rgba(0,0,0,0)", toy ? "#e0526b" : neu ? "#e2e8f0" : "#111827", 512, 160), transparent: true, roughness: 0.4 }));
+  decal.position.set(0, 1.05, 1.352); turret.add(decal);
   const turMotor = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.9, 28), jointMat); turMotor.rotation.z = Math.PI / 2; turMotor.position.set(-1.75, 1.3, -0.3); turret.add(turMotor);
 
   const shoulder = new THREE.Group(); shoulder.position.y = SH_Y - 2.2; turret.add(shoulder);
@@ -328,9 +373,12 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
   const cableCurve = (len: number, x: number) => new THREE.CatmullRomCurve3([new THREE.Vector3(x, 0.9, 0.5), new THREE.Vector3(x + 0.05, len * 0.35, 0.78), new THREE.Vector3(x - 0.02, len * 0.7, 0.72), new THREE.Vector3(x, len - 0.7, 0.5)]);
   shoulder.add(new THREE.Mesh(new THREE.TubeGeometry(cableCurve(L1, 0.95), 24, 0.11, 8), std(0x0b0d10, 0.5, 0.2)));
 
+  const boltRing = (parent: THREE.Object3D, x: number, r: number, n: number) => { for (let b = 0; b < n; b++) { const a = (b / n) * Math.PI * 2, bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.08, 6), steel); bolt.rotation.z = Math.PI / 2; bolt.position.set(x, Math.cos(a) * r, Math.sin(a) * r); parent.add(bolt); } };
+  boltRing(shoulder, 1.82, 0.52, 8);
   const elbow = new THREE.Group(); elbow.position.y = L1; shoulder.add(elbow);
   const elJoint = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 2.0, 36), jointMat); elJoint.rotation.z = Math.PI / 2; elbow.add(elJoint);
   const elCap = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.36, 28), steel); elCap.rotation.z = Math.PI / 2; elCap.position.x = 1.1; elbow.add(elCap);
+  boltRing(elbow, 1.3, 0.42, 6);
   const fore = new THREE.Mesh(linkGeometry(L2, 0.84, 0.54, 1.2, 0.09), bodyMat); elbow.add(fore);
   elbow.add(new THREE.Mesh(new THREE.TubeGeometry(cableCurve(L2, 0.7), 24, 0.09, 8), std(0x0b0d10, 0.5, 0.2)));
 
@@ -338,6 +386,8 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
   const wr1 = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 1.0, 28), jointMat); wr1.rotation.z = Math.PI / 2; wrist.add(wr1);
   const wr2 = new THREE.Mesh(new THREE.SphereGeometry(0.46, 24, 18), bodyMat); wr2.position.y = -0.32; wrist.add(wr2);
   const plunger = new THREE.Group(); wrist.add(plunger);
+  const ledMat = new THREE.MeshBasicMaterial({ color: toy ? 0xff7ab0 : real ? 0x7dd3fc : sand ? 0x4ade80 : 0x93c5fd, toneMapped: false });
+  const led = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.045, 8, 40), ledMat); led.rotation.x = Math.PI / 2; led.position.y = -0.5; plunger.add(led);
   const plate2 = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.2, 28), steel); plate2.position.y = -0.62; plunger.add(plate2);
   const collet = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.38, 0.5, 24), darkMat); collet.position.y = -0.92; plunger.add(collet);
   if (toy) { // stainless probe with a rubber grip and a rose tip
@@ -360,7 +410,8 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
     shock: { mesh: THREE.Mesh; t0: number } | null; shake: number; ecgAt: number;
   } = { yaw: 0, d: 3.4, hw: 11.2, curPlunge: 0, plunged: false, confetti: null, shock: null, shake: 0, ecgAt: -1 };
 
-  const resize = fitToContainer(container, renderer, camera);
+  const post = makePost(renderer, scene, camera, toy ? { ao: 1.0, aoRadius: 1.6 } : real ? { ao: 1.0, aoRadius: 1.4, bloom: 0.35, bloomThreshold: 1.4, bloomRadius: 0.35 } : sand ? { ao: 0.9, bloom: 0.3, bloomThreshold: 1.4 } : { ao: 0.8 });
+  const resize = fitToContainer(container, renderer, camera, post);
   resize();
 
   function triggerEffect(t: number, snap: SelectSnap) {
@@ -421,6 +472,7 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
       chestMesh.scale.z = 0.86 * (1 + Math.sin(t * rate) * 0.04);
     }
     if (monitorScreen && t - fx.ecgAt > 0.05) { fx.ecgAt = t; ecg.draw(t, fx.plunged && real, false); }
+    if (real) ledMat.color.setHex(fx.plunged ? (Math.sin(t * 12) > 0 ? 0xff2020 : 0x550000) : snap.open ? 0xfbbf24 : 0x7dd3fc);
     if (redBeacon) redBeacon.intensity = (fx.plunged ? 90 : 35) + 40 * Math.max(0, Math.sin(t * (fx.plunged ? 14 : 5)));
     if (targetRing) (targetRing.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.35 * Math.sin(t * 4);
 
@@ -444,13 +496,13 @@ export function createArmScene(container: HTMLElement, skin: SceneSkin, s0: Sele
 
     camera.position.set(Math.sin(t * 0.16) * 1.6 + (Math.random() - 0.5) * fx.shake, 13.4 + (Math.random() - 0.5) * fx.shake, 25.2);
     camera.lookAt(0, 4.2, 1.6);
-    renderer.render(scene, camera);
+    post.render();
   }
 
   return {
     frame,
     resize,
     snapshotJpeg: () => canvas.toDataURL("image/jpeg", 0.6),
-    dispose() { disposeRenderer(renderer, canvas); },
+    dispose() { post.dispose(); disposeRenderer(renderer, canvas); },
   };
 }

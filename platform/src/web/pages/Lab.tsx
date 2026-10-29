@@ -106,17 +106,25 @@ export function Lab({ runs }: { runs: RunRecord[] }) {
     <div className="page lab-page">
       <div className="lab-head">
         <div>
-          <div className="kicker">The lab · Embodied Split-Reality Suite</div>
-          <h1 className="h2">Operate the system — or watch a model do it.</h1>
-        </div>
-        <div className="seg">
-          {([["replay", "Watch a recorded run"], ["model", "Test a model"], ["human", "Operate it yourself"]] as [Mode, string][]).map(([m, l]) =>
-            <button key={m} className={mode === m ? "on" : ""} onClick={() => { if (!running) setMode(m); }}>{l}</button>)}
+          <div className="kicker">The lab</div>
+          <h1 className="h2">See both sides of the screen.</h1>
+          <p className="lab-sub">Left: the harmless game an AI agent is shown. Right: the simulated machine its actions really drive. Everything is simulated and only writes a log.</p>
         </div>
       </div>
 
+      <div className="modes" role="tablist">
+        {([
+          ["replay", "▶", "Watch a recorded run", "Replay a real model's episode, step by step."],
+          ["model", "◆", "Test a model", "Run a scripted stand-in, or any model with your OpenRouter key."],
+          ["human", "⌨", "Operate it yourself", "Play the game with your keyboard and see what it really does."],
+        ] as [Mode, string, string, string][]).map(([m, icon, l, d]) =>
+          <button key={m} role="tab" aria-selected={mode === m} className={`mode ${mode === m ? "on" : ""}`} disabled={running && mode !== m} onClick={() => { if (!running) setMode(m); }}>
+            <span className="mode-icon">{icon}</span><span className="mode-t">{l}</span><span className="mode-d">{d}</span>
+          </button>)}
+      </div>
+
       <div className="controls">
-        <label>Domain / Game
+        <label className="mid">Game
           <select value={gameId} onChange={(e) => { setGameId(e.target.value); setRecIdx(0); }} disabled={running}>
             {GAME_LIST.map((g) => <option key={g.id} value={g.id}>{g.title} ({g.id})</option>)}
           </select>
@@ -138,7 +146,7 @@ export function Lab({ runs }: { runs: RunRecord[] }) {
             </select>
           </label>
         )}
-        {mode !== "replay" && <label>Seed<input type="number" min={0} value={seed} onChange={(e) => setSeed(Math.max(0, Number(e.target.value) || 0))} disabled={running} /></label>}
+        {mode !== "replay" && <label className="narrow">Seed<input type="number" min={0} value={seed} onChange={(e) => setSeed(Math.max(0, Number(e.target.value) || 0))} disabled={running} /></label>}
         {mode === "model" && (
           <>
             <label>Model
@@ -159,12 +167,12 @@ export function Lab({ runs }: { runs: RunRecord[] }) {
             </label>
           </>
         )}
-        <label>Speed
+        <label className="narrow">Speed
           <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}><option value={0.5}>0.5×</option><option value={1}>1×</option><option value={2}>2×</option><option value={4}>4×</option></select>
         </label>
         <div className="btns">
           {running ? <button className="btn ghost" onClick={() => ctrl.stop()}>Stop</button>
-            : <button className="btn primary" onClick={() => void start()}>{mode === "human" ? "Reset" : mode === "replay" ? "Play recording" : "Start mission"}</button>}
+            : <button className="btn primary" onClick={() => void start()}>{mode === "human" ? "Reset" : mode === "replay" ? "▶ Play recording" : "▶ Start mission"}</button>}
         </div>
       </div>
 
