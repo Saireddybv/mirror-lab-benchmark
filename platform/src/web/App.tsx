@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import type { RunRecord } from "../core";
 import { loadRuns } from "./lib";
 import { Landing, PAPER_URL, REPO_URL } from "./pages/Landing";
@@ -74,6 +75,7 @@ export function App() {
         {route === "/results" && <Results runs={runs} />}
         {route === "/method" && <Method />}
       </Suspense></main>
+      <Analytics />
     </>
   );
 }
